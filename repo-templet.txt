@@ -1,0 +1,15 @@
+github-k8s-cicd-templates/
+  .github/
+    workflows/
+      l1-pr-build-and-package.yml   # Level 1 - PR pipeline
+      # (בהמשך נוסיף L2, L3)
+  helm/
+    app-chart/                      # Base Helm chart template for services
+      Chart.yaml
+      values.yaml
+      templates/
+        deployment.yaml
+        service.yaml
+        ingress.yaml
+        _helpers.tpl
+  README.md
