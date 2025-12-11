@@ -7,8 +7,8 @@ on:
       - develop
     # Optional: ignore changes that are not relevant to the build
     paths-ignore:
-      - 'README.md'
-      - '.github/**'
+      - "README.md"
+      - ".github/**"
 
 env:
   # Image name defaults to the repository full name (org/repo)
@@ -30,32 +30,43 @@ jobs:
     steps:
       - name: "Checkout source code"
         uses: actions/checkout@v4
-        # This will checkout the target repository code when copied there
+        # This will checkout the target repository code when copied there.
 
       - name: "Set up Docker Buildx"
         uses: docker/setup-buildx-action@v3
-        # Buildx is recommended for modern Docker builds and caching
+        # Buildx is recommended for modern Docker builds and caching.
 
-      - name: "Log in to Docker registry (optional)"
-        if: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-        # This step is optional - if secrets are not defined, it will be skipped.
-        # When defined, it allows pushing images from PRs to a registry for testing.
+      - name: "Docker login (optional, based on secrets)"
+        id: docker_login
+        run: |
+          if [ -z "${DOCKERHUB_USERNAME}" ] || [ -z "${DOCKERHUB_TOKEN}" ]; then
+            echo "Docker Hub credentials are not configured. Skipping registry login."
+            echo "push_image=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
-      - name: "Build Docker image (no push)"
+          echo "Logging in to Docker Hub as ${DOCKERHUB_USERNAME}..."
+          echo "${DOCKERHUB_TOKEN}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin
+          echo "push_image=true" >> "$GITHUB_OUTPUT"
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        # This step:
+        #  - checks if credentials exist
+        #  - logs in only when both username and token are provided
+        #  - exposes an output 'push_image' that controls whether we push the image
+
+      - name: "Build and optionally push Docker image"
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ${{ env.DOCKERFILE_PATH }}
-          push: false
+          push: ${{ steps.docker_login.outputs.push_image == 'true' }}
           tags: |
             ${{ env.IMAGE_NAME }}:pr-${{ github.event.pull_request.number }}
             ${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
-        # We build the image to validate Dockerfile correctness and dependencies.
-        # Images are tagged with both PR number and commit SHA for traceability.
+        # When 'push_image' is true, the image will be pushed to Docker Hub.
+        # Otherwise, this runs as a pure build validation without pushing.
 
       - name: "Install Helm CLI"
         uses: azure/setup-helm@v4
