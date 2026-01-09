@@ -2,14 +2,7 @@ name: "L1 - PR Build & Helm Package"
 
 on:
   workflow_call:
-  pull_request:
-    branches:
-      - main
-      - develop
-    # Optional: ignore changes that are not relevant to the build
-    paths-ignore:
-      - "README.md"
-      - ".github/**"
+
 
 env:
   # Image name defaults to the repository full name (org/repo)
