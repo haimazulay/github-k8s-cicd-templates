@@ -1,6 +1,7 @@
 name: "L1 - PR Build & Helm Package"
 
 on:
+  workflow_call:
   pull_request:
     branches:
       - main
