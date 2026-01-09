@@ -2,21 +2,33 @@ name: "L3 - Deploy on Merge to Main"
 
 on:
   workflow_call:
-
-
+    inputs:
+      helm_chart_dir:
+        description: 'Path to Helm chart directory'
+        required: false
+        type: string
+        default: './helm/app-chart'
+      k8s_namespace:
+        description: 'Kubernetes namespace'
+        required: false
+        type: string
+        default: 'k8s-cicd-sample'
+      helm_release_name:
+        description: 'Helm release name'
+        required: false
+        type: string
+        default: 'sample-service'
+      local_image_name:
+        description: 'Local image name'
+        required: false
+        type: string
+        default: 'sample-service'
+      # Tag is usually derived from SHA, but we can allow override or just use env in steps
+      
 env:
-  # Helm chart location inside the repository
-  HELM_CHART_DIR: ./helm/app-chart
-
-  # Kubernetes namespace to deploy to
-  K8S_NAMESPACE: k8s-cicd-sample
-
-  # Helm release name (can be overridden per repo)
-  HELM_RELEASE_NAME: sample-service
-
-  # Local image name that will be built and loaded into kind
-  LOCAL_IMAGE_NAME: sample-service
+  # Derived or fixed env vars
   LOCAL_IMAGE_TAG: sha-${{ github.sha }}
+
 
 jobs:
   deploy:
@@ -41,7 +53,7 @@ jobs:
           docker build -t "${IMAGE}" -f ./Dockerfile .
           docker images "${IMAGE}"
         env:
-          LOCAL_IMAGE_NAME: ${{ env.LOCAL_IMAGE_NAME }}
+          LOCAL_IMAGE_NAME: ${{ inputs.local_image_name }}
           LOCAL_IMAGE_TAG: ${{ env.LOCAL_IMAGE_TAG }}
         # This builds the application image locally on the GitHub runner.
         # We do NOT push it to any remote registry in this job.
@@ -59,7 +71,7 @@ jobs:
           echo "Loading image ${IMAGE} into kind cluster 'ci-cd-demo'"
           kind load docker-image "${IMAGE}" --name ci-cd-demo
         env:
-          LOCAL_IMAGE_NAME: ${{ env.LOCAL_IMAGE_NAME }}
+          LOCAL_IMAGE_NAME: ${{ inputs.local_image_name }}
           LOCAL_IMAGE_TAG: ${{ env.LOCAL_IMAGE_TAG }}
         # `kind load docker-image` makes the locally built image available
         # to all nodes in the kind cluster without using an external registry.
@@ -81,7 +93,7 @@ jobs:
           kubectl get namespace "${K8S_NAMESPACE}" >/dev/null 2>&1 || \
           kubectl create namespace "${K8S_NAMESPACE}"
         env:
-          K8S_NAMESPACE: ${{ env.K8S_NAMESPACE }}
+          K8S_NAMESPACE: ${{ inputs.k8s_namespace }}
 
       - name: "Helm upgrade --install"
         run: |
@@ -97,10 +109,10 @@ jobs:
             --set image.repository="${IMAGE}" \
             --set image.tag="${TAG}"
         env:
-          HELM_CHART_DIR: ${{ env.HELM_CHART_DIR }}
-          K8S_NAMESPACE: ${{ env.K8S_NAMESPACE }}
-          HELM_RELEASE_NAME: ${{ env.HELM_RELEASE_NAME }}
-          LOCAL_IMAGE_NAME: ${{ env.LOCAL_IMAGE_NAME }}
+          HELM_CHART_DIR: ${{ inputs.helm_chart_dir }}
+          K8S_NAMESPACE: ${{ inputs.k8s_namespace }}
+          HELM_RELEASE_NAME: ${{ inputs.helm_release_name }}
+          LOCAL_IMAGE_NAME: ${{ inputs.local_image_name }}
           LOCAL_IMAGE_TAG: ${{ env.LOCAL_IMAGE_TAG }}
         # The Helm release is configured to use the locally built image,
         # which was already loaded into the kind cluster.
@@ -128,5 +140,5 @@ jobs:
             exit 1
           fi
         env:
-          HELM_RELEASE_NAME: ${{ env.HELM_RELEASE_NAME }}
-          K8S_NAMESPACE: ${{ env.K8S_NAMESPACE }}
+          HELM_RELEASE_NAME: ${{ inputs.helm_release_name }}
+          K8S_NAMESPACE: ${{ inputs.k8s_namespace }}

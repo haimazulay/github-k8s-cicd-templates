@@ -2,15 +2,27 @@ name: "L1 - PR Build & Helm Package"
 
 on:
   workflow_call:
-
+    inputs:
+      image_name:
+        description: 'Image name (defaults to repo name)'
+        required: false
+        type: string
+        default: ''
+      dockerfile_path:
+        description: 'Path to Dockerfile'
+        required: false
+        type: string
+        default: './Dockerfile'
+      helm_chart_dir:
+        description: 'Path to Helm chart directory'
+        required: false
+        type: string
+        default: './helm/app-chart'
 
 env:
-  # Image name defaults to the repository full name (org/repo)
-  IMAGE_NAME: ${{ github.repository }}
-  # Path to the Dockerfile (can be overridden per repo if needed)
-  DOCKERFILE_PATH: ./Dockerfile
-  # Path to the Helm chart within the target repository
-  HELM_CHART_DIR: ./helm/app-chart
+  # Image name logic handled in steps or via intermediate env var if needed
+  # We will use inputs directly or set env vars from inputs
+
 
 jobs:
   build-and-package:
@@ -54,11 +66,13 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ${{ env.DOCKERFILE_PATH }}
+          context: .
+          file: ${{ inputs.dockerfile_path }}
           push: ${{ steps.docker_login.outputs.push_image == 'true' }}
           tags: |
-            ${{ env.IMAGE_NAME }}:pr-${{ github.event.pull_request.number }}
-            ${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+            ${{ inputs.image_name != '' && inputs.image_name || github.repository }}:pr-${{ github.event.pull_request.number }}
+            ${{ inputs.image_name != '' && inputs.image_name || github.repository }}:sha-${{ github.sha }}
+
         # When 'push_image' is true, the image will be pushed to Docker Hub.
         # Otherwise, this runs as a pure build validation without pushing.
 
@@ -73,7 +87,7 @@ jobs:
           echo "Linting Helm chart in directory: ${HELM_CHART_DIR}"
           helm lint "${HELM_CHART_DIR}"
         env:
-          HELM_CHART_DIR: ${{ env.HELM_CHART_DIR }}
+          HELM_CHART_DIR: ${{ inputs.helm_chart_dir }}
         # 'helm lint' validates chart structure and values for common issues.
 
       - name: "Package Helm chart"
@@ -82,7 +96,7 @@ jobs:
           echo "Packaging Helm chart from: ${HELM_CHART_DIR}"
           helm package "${HELM_CHART_DIR}" --destination packaged-chart
         env:
-          HELM_CHART_DIR: ${{ env.HELM_CHART_DIR }}
+          HELM_CHART_DIR: ${{ inputs.helm_chart_dir }}
         # 'helm package' creates a versioned .tgz that can be used for deployments.
 
       - name: "Upload packaged chart as workflow artifact"

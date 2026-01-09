@@ -2,17 +2,26 @@ name: "L2 - Push Validate & Build"
 
 on:
   workflow_call:
-
+    inputs:
+      image_name:
+        description: 'Image name (defaults to repo name)'
+        required: false
+        type: string
+        default: ''
+      dockerfile_path:
+        description: 'Path to Dockerfile'
+        required: false
+        type: string
+        default: './Dockerfile'
+      registry:
+        description: 'Container registry'
+        required: false
+        type: string
+        default: 'docker.io'
 
 env:
-  # Default image name is the GitHub repository full name (org/repo).
-  IMAGE_NAME: ${{ github.repository }}
+  # Image name logic handled via inputs
 
-  # Default path to the Dockerfile. Can be customized per onboarded repo.
-  DOCKERFILE_PATH: ./Dockerfile
-
-  # Default container registry. For Docker Hub this is docker.io.
-  REGISTRY: docker.io
 
 jobs:
   validate-and-build:
@@ -63,11 +72,12 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ${{ env.DOCKERFILE_PATH }}
+          file: ${{ inputs.dockerfile_path }}
           push: ${{ steps.docker_login.outputs.push_image == 'true' }}
           tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:branch-${{ github.ref_name }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+            ${{ inputs.registry }}/${{ inputs.image_name != '' && inputs.image_name || github.repository }}:branch-${{ github.ref_name }}
+            ${{ inputs.registry }}/${{ inputs.image_name != '' && inputs.image_name || github.repository }}:sha-${{ github.sha }}
+
         # If 'push_image' is true, the image will be pushed to Docker Hub.
         # Otherwise, this acts as a validation-only build.
         #
