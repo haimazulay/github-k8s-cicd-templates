@@ -1,6 +1,7 @@
 name: "Templates Validation"
 
 on:
+  workflow_call:
   push:
     branches:
       - main

@@ -1,6 +1,7 @@
 name: "L3 - Deploy on Merge to Main"
 
 on:
+  workflow_call:
   push:
     branches:
       - main
