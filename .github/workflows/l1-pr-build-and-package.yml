@@ -19,10 +19,6 @@ on:
         type: string
         default: './helm/app-chart'
 
-env:
-  # Image name logic handled in steps or via intermediate env var if needed
-  # We will use inputs directly or set env vars from inputs
-
 
 jobs:
   build-and-package:
@@ -65,7 +61,6 @@ jobs:
       - name: "Build and optionally push Docker image"
         uses: docker/build-push-action@v5
         with:
-          context: .
           context: .
           file: ${{ inputs.dockerfile_path }}
           push: ${{ steps.docker_login.outputs.push_image == 'true' }}
