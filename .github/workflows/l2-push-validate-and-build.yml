@@ -1,15 +1,8 @@
 name: "L2 - Push Validate & Build"
 
 on:
-  push:
-    branches:
-      - main
-      - develop
-      - "feature/**"
-      - "hotfix/**"
-    paths-ignore:
-      - "README.md"
-      - ".github/**"
+  workflow_call:
+
 
 env:
   # Default image name is the GitHub repository full name (org/repo).
