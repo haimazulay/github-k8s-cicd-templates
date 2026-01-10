@@ -2,13 +2,6 @@ name: "L2 - Push Validate & Build"
 
 on:
   workflow_call:
-    secrets:
-      DOCKERHUB_USERNAME:
-        required: false
-      DOCKERHUB_TOKEN:
-        required: false
-      GHCR_TOKEN:
-        required: false
     inputs:
       image_name:
         description: "Image name (defaults to repo name)"
@@ -20,29 +13,22 @@ on:
         required: false
         type: string
         default: "./Dockerfile"
-      registry:
-        description: "Target registry: dockerhub or ghcr"
-        required: false
-        type: string
-        default: "dockerhub"
 
 jobs:
   validate-and-build:
-    name: "Run validations and build Docker image"
+    name: "Validate & Build"
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
-    # Needed for GHCR pushes using GITHUB_TOKEN. Safe even if you use Docker Hub only.
     permissions:
       contents: read
       packages: write
 
     env:
-      # Default image name = repo name (e.g., parking_lot)
-      # If input image_name is empty, we fall back to the repository name (part after slash).
-      REPO_NAME: ${{ github.event.repository.name }}
+      REGISTRY: ghcr.io
+      REPO_OWNER: ${{ github.repository_owner }}
       IMAGE_NAME: ${{ inputs.image_name != '' && inputs.image_name || github.event.repository.name }}
       DOCKERFILE_PATH: ${{ inputs.dockerfile_path }}
-      REGISTRY_CHOICE: ${{ inputs.registry }}
 
     steps:
       - name: "Checkout source code"
@@ -56,77 +42,31 @@ jobs:
           echo "  - pytest"
           echo "  - npm test"
           echo "  - golangci-lint run"
-        # Each onboarded repository can replace this with real tests.
 
       - name: "Set up Docker Buildx"
         uses: docker/setup-buildx-action@v3
 
-      - name: "Select registry, compute full image name, and login (optional)"
-        id: reg
-        env:
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OWNER: ${{ github.repository_owner }}
-          IMAGE_NAME: ${{ env.IMAGE_NAME }}
-          REGISTRY_CHOICE: ${{ env.REGISTRY_CHOICE }}
-        run: |
-          set -e
-
-          # Normalize choice
-          CHOICE=$(echo "${REGISTRY_CHOICE}" | tr '[:upper:]' '[:lower:]' | xargs)
-
-          if [ "${CHOICE}" = "ghcr" ]; then
-            REG="ghcr.io"
-            FULL_IMAGE="${REG}/${OWNER}/${IMAGE_NAME}"
-
-            echo "full_image=${FULL_IMAGE}" >> "$GITHUB_OUTPUT"
-
-            # Prefer GHCR_TOKEN if provided; fallback to GITHUB_TOKEN
-            TOKEN="${GHCR_TOKEN}"
-            if [ -z "${TOKEN}" ]; then
-              TOKEN="${GITHUB_TOKEN}"
-            fi
-
-            if [ -z "${TOKEN}" ]; then
-              echo "No token available for GHCR. Will build without push."
-              echo "push=false" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-
-            echo "${TOKEN}" | docker login "${REG}" -u "${OWNER}" --password-stdin
-            echo "push=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          # Default: Docker Hub
-          REG="docker.io"
-          FULL_IMAGE="${REG}/${DOCKERHUB_USERNAME}/${IMAGE_NAME}"
-
-          echo "full_image=${FULL_IMAGE}" >> "$GITHUB_OUTPUT"
-
-          if [ -z "${DOCKERHUB_USERNAME}" ] || [ -z "${DOCKERHUB_TOKEN}" ]; then
-            echo "Docker Hub credentials are not configured. Will build without push."
-            echo "push=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          echo "${DOCKERHUB_TOKEN}" | docker login "${REG}" -u "${DOCKERHUB_USERNAME}" --password-stdin
-          echo "push=true" >> "$GITHUB_OUTPUT"
-
-      - name: "Build and optionally push Docker image"
+      - name: "Login to GHCR"
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: "Build and Push Docker image"
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ${{ env.DOCKERFILE_PATH }}
-          push: ${{ steps.reg.outputs.push == 'true' }}
+          push: true
           tags: |
-            ${{ steps.reg.outputs.full_image }}:branch-${{ github.ref_name }}
-            ${{ steps.reg.outputs.full_image }}:sha-${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.REPO_OWNER }}/${{ env.IMAGE_NAME }}:branch-${{ github.ref_name }}
+            ${{ env.REGISTRY }}/${{ env.REPO_OWNER }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: "Summary"
         run: |
-          echo "Registry choice: ${{ env.REGISTRY_CHOICE }}"
-          echo "Image: ${{ steps.reg.outputs.full_image }}"
-          echo "Pushed: ${{ steps.reg.outputs.push }}"
+          echo "Registry: ${{ env.REGISTRY }}"
+          echo "Image: ${{ env.REGISTRY }}/${{ env.REPO_OWNER }}/${{ env.IMAGE_NAME }}"
+
